@@ -36,7 +36,7 @@ def show_camera_thread():
 def show_lidar_live():
     global latest_points, stop_flag
     vis = o3d.visualization.Visualizer()
-    vis.create_window(window_name="Lidar Point Cloud FOV 87 deg", width=700, height=700)
+    vis.create_window(window_name="Lidar Point Cloud", width=700, height=700)
     pcd = o3d.geometry.PointCloud()
     added = False
     while not stop_flag:
@@ -66,7 +66,7 @@ def main():
     lidar_bp = blueprint_library.find('sensor.lidar.ray_cast')
     lidar_bp.set_attribute('channels', '32')
     lidar_bp.set_attribute('points_per_second', '20000')
-    lidar_bp.set_attribute('rotation_frequency', '0')    # Tidak berputar
+    lidar_bp.set_attribute('rotation_frequency', '2000')    # Tidak berputar
     lidar_bp.set_attribute('range', '50')
     lidar_bp.set_attribute('horizontal_fov', '87')
     lidar_bp.set_attribute('upper_fov', '10')
