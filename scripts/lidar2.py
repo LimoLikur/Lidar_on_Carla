@@ -5,29 +5,26 @@ import cv2
 import threading
 import time
 
-# Ukuran window yang sama untuk kamera & lidar
+# Ukuran window
 WINDOW_W, WINDOW_H = 400, 300
 
-# Variabel global agar thread bisa sharing data
 latest_image = None
 latest_points = None
 stop_threads = False
 
 def camera_callback(image):
     global latest_image
-    # Konversi ke numpy array, reshape, resize
     img = np.frombuffer(image.raw_data, dtype=np.uint8)
     img = img.reshape((image.height, image.width, 4))
-    img = img[:, :, :3]  # Buang channel alpha
+    img = img[:, :, :3]
     img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
     img = cv2.resize(img, (WINDOW_W, WINDOW_H))
     latest_image = img
 
 def lidar_callback(point_cloud):
     global latest_points
-    # Ambil x, y, z, intensity
     points = np.frombuffer(point_cloud.raw_data, dtype=np.float32).reshape(-1, 4)
-    latest_points = points  # (N, 4): x, y, z, intensity
+    latest_points = points
 
 def camera_window():
     global stop_threads
@@ -51,14 +48,12 @@ def lidar_window():
         if latest_points is not None:
             xyz = latest_points[:, :3]
             intens = latest_points[:, 3]
-            # Normalisasi intensitas ke 0-1
+            # Normalisasi ke [0,1]
             intens_norm = (intens - intens.min()) / (intens.ptp() + 1e-6)
-            # Skala ke 0-255 dan pastikan shape (N,1)
+            # Skala ke [0,255], pastikan shape (N,1)
             intens_img = np.clip((intens_norm * 255), 0, 255).astype(np.uint8).reshape(-1, 1)
-            # Pewarnaan colormap JET
             colors = cv2.applyColorMap(intens_img, cv2.COLORMAP_JET)
-            colors = colors[:, ::-1] / 255.0  # BGR ke RGB dan ke [0,1]
-            # Pastikan jumlah points = jumlah warna
+            colors = colors[:, ::-1] / 255.0  # BGR ke RGB dan [0,1]
             if xyz.shape[0] == colors.shape[0]:
                 pcd.points = o3d.utility.Vector3dVector(xyz)
                 pcd.colors = o3d.utility.Vector3dVector(colors)
@@ -82,14 +77,12 @@ def main():
     spawn_point = world.get_map().get_spawn_points()[0]
     vehicle = world.try_spawn_actor(vehicle_bp, spawn_point)
 
-    # Kamera
     camera_bp = blueprint_library.find('sensor.camera.rgb')
     camera_bp.set_attribute('image_size_x', '800')
     camera_bp.set_attribute('image_size_y', '600')
     camera_transform = carla.Transform(carla.Location(x=1.5, z=2.4))
     camera = world.spawn_actor(camera_bp, camera_transform, attach_to=vehicle)
 
-    # Lidar
     lidar_bp = blueprint_library.find('sensor.lidar.ray_cast')
     lidar_bp.set_attribute('channels', '32')
     lidar_bp.set_attribute('points_per_second', '56000')
@@ -98,7 +91,6 @@ def main():
     lidar_transform = carla.Transform(carla.Location(x=0, z=2.5))
     lidar_sensor = world.spawn_actor(lidar_bp, lidar_transform, attach_to=vehicle)
 
-    # Listen ke sensor
     camera.listen(camera_callback)
     lidar_sensor.listen(lidar_callback)
 
