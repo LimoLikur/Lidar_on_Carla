@@ -5,20 +5,20 @@ import cv2
 import threading
 import time
 
-# Ukuran window
+# Ukuran window yang sama untuk kamera & lidar
 WINDOW_W, WINDOW_H = 400, 300
 
-# Variabel global
+# Variabel global agar thread bisa sharing data
 latest_image = None
 latest_points = None
 stop_threads = False
 
 def camera_callback(image):
     global latest_image
-    # Convert ke numpy array, reshape, dan resize
+    # Konversi ke numpy array, reshape, resize
     img = np.frombuffer(image.raw_data, dtype=np.uint8)
     img = img.reshape((image.height, image.width, 4))
-    img = img[:, :, :3]  # Buang alpha
+    img = img[:, :, :3]  # Buang channel alpha
     img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
     img = cv2.resize(img, (WINDOW_W, WINDOW_H))
     latest_image = img
@@ -51,15 +51,22 @@ def lidar_window():
         if latest_points is not None:
             xyz = latest_points[:, :3]
             intens = latest_points[:, 3]
-            # Normalisasi intensitas ke [0, 1], pewarnaan gradasi (cmap jet)
+            # Normalisasi intensitas ke 0-1
             intens_norm = (intens - intens.min()) / (intens.ptp() + 1e-6)
-            colors = cv2.applyColorMap(np.clip((intens_norm*255).astype(np.uint8),0,255), cv2.COLORMAP_JET)
-            colors = colors[:, :3][:, ::-1] / 255.0  # BGR to RGB
-            pcd.points = o3d.utility.Vector3dVector(xyz)
-            pcd.colors = o3d.utility.Vector3dVector(colors)
-            vis.update_geometry(pcd)
-            vis.poll_events()
-            vis.update_renderer()
+            # Skala ke 0-255 dan pastikan shape (N,1)
+            intens_img = np.clip((intens_norm * 255), 0, 255).astype(np.uint8).reshape(-1, 1)
+            # Pewarnaan colormap JET
+            colors = cv2.applyColorMap(intens_img, cv2.COLORMAP_JET)
+            colors = colors[:, ::-1] / 255.0  # BGR ke RGB dan ke [0,1]
+            # Pastikan jumlah points = jumlah warna
+            if xyz.shape[0] == colors.shape[0]:
+                pcd.points = o3d.utility.Vector3dVector(xyz)
+                pcd.colors = o3d.utility.Vector3dVector(colors)
+                vis.update_geometry(pcd)
+                vis.poll_events()
+                vis.update_renderer()
+            else:
+                print("WARNING: shape mismatch! xyz:", xyz.shape, "colors:", colors.shape)
             time.sleep(0.02)
         else:
             time.sleep(0.05)
