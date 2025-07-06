@@ -35,7 +35,7 @@ def show_camera_thread():
 
 def detect_object_front(points, front_distance=10, width=2.0):
     if points is None:
-        return False, 0
+        return False, 0, None
     mask = (
         (points[:, 0] > 0.5) & (points[:, 0] < front_distance)
         & (np.abs(points[:, 1]) < width/2)
@@ -49,39 +49,42 @@ def show_lidar_live():
     vis = o3d.visualization.Visualizer()
     vis.create_window(window_name="Lidar Point Cloud FOV 87 deg", width=700, height=700)
     pcd = o3d.geometry.PointCloud()
-    # Buat bounding box area deteksi depan
     bbox = o3d.geometry.AxisAlignedBoundingBox(
-        min_bound=[0.5, -1.0, -2.0],  # x_min, y_min, z_min
-        max_bound=[10.0, 1.0, 2.0],   # x_max, y_max, z_max
+        min_bound=[0.5, -1.0, -2.0],
+        max_bound=[10.0, 1.0, 2.0],
     )
-    bbox.color = (0, 1, 0)  # Hijau transparan
+    bbox.color = (0, 1, 0)
     added = False
     while not stop_flag:
-        if latest_points is not None:
-            # Warnai point cloud: merah jika dekat (<3m), putih jika tidak
-            dists = np.linalg.norm(latest_points, axis=1)
-            colors = np.ones((latest_points.shape[0], 3))  # putih
-            colors[dists < 3.0] = [1, 0, 0]  # merah jika <3m
+        try:
+            if latest_points is not None:
+                points = latest_points.copy()
+                dists = np.linalg.norm(points, axis=1)
+                colors = np.ones((points.shape[0], 3))  # putih
+                colors[dists < 3.0] = [1, 0, 0]  # merah jika <3m
 
-            pcd.points = o3d.utility.Vector3dVector(latest_points)
-            pcd.colors = o3d.utility.Vector3dVector(colors)
+                pcd.points = o3d.utility.Vector3dVector(points)
+                pcd.colors = o3d.utility.Vector3dVector(colors)
 
-            if not added:
-                vis.add_geometry(pcd)
-                vis.add_geometry(bbox)
-                added = True
-            else:
-                vis.update_geometry(pcd)
-                vis.update_geometry(bbox)
-            vis.poll_events()
-            vis.update_renderer()
+                if not added:
+                    vis.add_geometry(pcd)
+                    vis.add_geometry(bbox)
+                    added = True
+                else:
+                    vis.update_geometry(pcd)
+                    vis.update_geometry(bbox)
+                vis.poll_events()
+                vis.update_renderer()
 
-            # Deteksi objek depan
-            detected, count, mask = detect_object_front(latest_points, front_distance=10, width=2.0)
-            if detected:
-                print(f"🚨 Objek terdeteksi di depan! ({count} titik dalam 10m)")
-            else:
-                print("Tidak ada objek di depan (<10m).", end='\r')
+                # Deteksi objek depan
+                detected, count, mask = detect_object_front(points, front_distance=10, width=2.0)
+                if detected:
+                    print(f"🚨 Objek terdeteksi di depan! ({count} titik dalam 10m)")
+                else:
+                    print("Tidak ada objek di depan (<10m).", end='\r')
+        except Exception:
+            # Lewati frame jika ada error sinkronisasi array
+            pass
         time.sleep(0.03)
     vis.destroy_window()
 
@@ -95,7 +98,7 @@ def main():
     spawn_point = world.get_map().get_spawn_points()[0]
     vehicle = world.spawn_actor(vehicle_bp, spawn_point)
 
-    # Lidar setup (ubah sesuai kebutuhanmu)
+    # Lidar setup
     lidar_bp = blueprint_library.find('sensor.lidar.ray_cast')
     lidar_bp.set_attribute('channels', '64')
     lidar_bp.set_attribute('points_per_second', '1500000')
