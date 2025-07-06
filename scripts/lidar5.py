@@ -45,9 +45,11 @@ def show_lidar_live():
                 points = latest_points.copy()
                 # Kriteria objek vertikal pendek/tinggi: gunakan sumbu Z (tinggi)
                 # Misal, threshold: |z| < 1.5 -> biru (objek pendek), |z| >= 1.5 -> kuning (objek tinggi)
-                z_height = np.abs(points[:, 2])
-                colors = np.tile([0, 0.5, 1], (points.shape[0], 1))  # biru muda (objek pendek)
-                colors[z_height >= 1.5] = [1, 1, 0]  # kuning (objek tinggi)
+                z = points[:, 2]
+                colors = np.tile([0, 0.5, 1], (points.shape[0], 1))  # biru default
+                colors[z > 1.5] = [1, 1, 0]  # kuning untuk objek tinggi
+                # Bisa tambahkan warna lain untuk z sedang jika ingin
+                colors[(z > 0) & (z <= 1.5)] = [0, 1, 0]  # hijau untuk objek sedang
                 
                 pcd.points = o3d.utility.Vector3dVector(points)
                 pcd.colors = o3d.utility.Vector3dVector(colors)
