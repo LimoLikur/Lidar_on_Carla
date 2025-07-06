@@ -59,12 +59,19 @@ def show_lidar_live():
         try:
             if latest_points is not None:
                 points = latest_points.copy()
+                # Default: semua titik warna aslinya (point cloud Lidar biasanya abu-abu)
+                # Tapi jika ingin benar-benar warna asli Lidar Carla (intensitas), bisa gunakan channel ke-4
+                # Namun data ini tidak dipakai di sini, jadi kita biarkan Open3D pakai default
+                # Titik yang sangat dekat (<3m) diberi warna merah
                 dists = np.linalg.norm(points, axis=1)
-                colors = np.ones((points.shape[0], 3))  # putih
-                colors[dists < 3.0] = [1, 0, 0]  # merah jika <3m
+                colors = None
+                if points.shape[0] > 0:
+                    colors = np.tile([0.6, 0.6, 0.6], (points.shape[0], 1)) # abu-abu
+                    colors[dists < 3.0] = [1, 0, 0]  # merah jika <3m
 
                 pcd.points = o3d.utility.Vector3dVector(points)
-                pcd.colors = o3d.utility.Vector3dVector(colors)
+                if colors is not None:
+                    pcd.colors = o3d.utility.Vector3dVector(colors)
 
                 if not added:
                     vis.add_geometry(pcd)
@@ -87,6 +94,17 @@ def show_lidar_live():
             pass
         time.sleep(0.03)
     vis.destroy_window()
+
+def move_vehicle(vehicle, throttle=0.3, duration=999):
+    """
+    Menggerakkan kendaraan maju dengan throttle tertentu.
+    """
+    control = carla.VehicleControl()
+    control.throttle = throttle
+    control.steer = 0.0
+    control.brake = 0.0
+    vehicle.apply_control(control)
+    # Kendaraan akan terus bergerak maju, thread ini bisa di-stop sesuai kebutuhan.
 
 def main():
     global stop_flag
@@ -127,6 +145,10 @@ def main():
     lidar_thread = threading.Thread(target=show_lidar_live, daemon=True)
     cam_thread.start()
     lidar_thread.start()
+
+    # Thread untuk menggerakkan mobil maju terus
+    move_thread = threading.Thread(target=move_vehicle, args=(vehicle, 0.3, 999), daemon=True)
+    move_thread.start()
 
     print("Tekan Q pada window kamera untuk keluar (kedua window akan tertutup).")
     while cam_thread.is_alive() and lidar_thread.is_alive() and not stop_flag:
