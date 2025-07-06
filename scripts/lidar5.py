@@ -33,22 +33,55 @@ def show_camera_thread():
         time.sleep(0.01)
     cv2.destroyAllWindows()
 
+def detect_object_front(points, front_distance=10, width=2.0):
+    if points is None:
+        return False, 0
+    mask = (
+        (points[:, 0] > 0.5) & (points[:, 0] < front_distance)
+        & (np.abs(points[:, 1]) < width/2)
+    )
+    count = np.sum(mask)
+    detected = count > 30
+    return detected, count, mask
+
 def show_lidar_live():
     global latest_points, stop_flag
     vis = o3d.visualization.Visualizer()
-    vis.create_window(window_name="Lidar Point Cloud", width=700, height=700)
+    vis.create_window(window_name="Lidar Point Cloud FOV 87 deg", width=700, height=700)
     pcd = o3d.geometry.PointCloud()
+    # Buat bounding box area deteksi depan
+    bbox = o3d.geometry.AxisAlignedBoundingBox(
+        min_bound=[0.5, -1.0, -2.0],  # x_min, y_min, z_min
+        max_bound=[10.0, 1.0, 2.0],   # x_max, y_max, z_max
+    )
+    bbox.color = (0, 1, 0)  # Hijau transparan
     added = False
     while not stop_flag:
         if latest_points is not None:
+            # Warnai point cloud: merah jika dekat (<3m), putih jika tidak
+            dists = np.linalg.norm(latest_points, axis=1)
+            colors = np.ones((latest_points.shape[0], 3))  # putih
+            colors[dists < 3.0] = [1, 0, 0]  # merah jika <3m
+
             pcd.points = o3d.utility.Vector3dVector(latest_points)
+            pcd.colors = o3d.utility.Vector3dVector(colors)
+
             if not added:
                 vis.add_geometry(pcd)
+                vis.add_geometry(bbox)
                 added = True
             else:
                 vis.update_geometry(pcd)
+                vis.update_geometry(bbox)
             vis.poll_events()
             vis.update_renderer()
+
+            # Deteksi objek depan
+            detected, count, mask = detect_object_front(latest_points, front_distance=10, width=2.0)
+            if detected:
+                print(f"🚨 Objek terdeteksi di depan! ({count} titik dalam 10m)")
+            else:
+                print("Tidak ada objek di depan (<10m).", end='\r')
         time.sleep(0.03)
     vis.destroy_window()
 
@@ -62,7 +95,7 @@ def main():
     spawn_point = world.get_map().get_spawn_points()[0]
     vehicle = world.spawn_actor(vehicle_bp, spawn_point)
 
-    # Lidar setup: FOV 87° depan, rapat
+    # Lidar setup (ubah sesuai kebutuhanmu)
     lidar_bp = blueprint_library.find('sensor.lidar.ray_cast')
     lidar_bp.set_attribute('channels', '64')
     lidar_bp.set_attribute('points_per_second', '1500000')
@@ -84,22 +117,18 @@ def main():
     camera_transform = carla.Transform(camera_location)
     camera_sensor = world.spawn_actor(camera_bp, camera_transform, attach_to=vehicle)
 
-    # Start sensor
     camera_sensor.listen(camera_callback)
     lidar_sensor.listen(lidar_callback)
 
-    # Start threads untuk masing-masing window
     cam_thread = threading.Thread(target=show_camera_thread, daemon=True)
     lidar_thread = threading.Thread(target=show_lidar_live, daemon=True)
     cam_thread.start()
     lidar_thread.start()
 
     print("Tekan Q pada window kamera untuk keluar (kedua window akan tertutup).")
-    # Tunggu sampai user menutup window kamera
     while cam_thread.is_alive() and lidar_thread.is_alive() and not stop_flag:
         time.sleep(0.1)
 
-    # Cleanup
     lidar_sensor.stop()
     lidar_sensor.destroy()
     camera_sensor.stop()
